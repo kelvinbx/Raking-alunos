@@ -40,6 +40,7 @@ async function getPlayerData({ gameName, tagLine }) {
 
         // 2. Obter dados do Invocador (ID, ícone)
         const summonerData = await fetchRiotData(`${platform}.api.riotgames.com/lol/summoner/v4/summoners/by-puuid/${puuid}`);
+        console.log(`Dados recebidos para ${gameName}:`, summonerData);
         if (!summonerData) return null;
 
         const { id: summonerId, profileIconId } = summonerData;
