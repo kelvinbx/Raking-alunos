@@ -1,26 +1,9 @@
 // script.js
 
-// --- CONFIGURAÇÃO ---
-// Adicione os Riot IDs dos jogadores que você quer mostrar aqui
-const playersConfig = [
-    // Substitua pelos jogadores que você quer na lista
-    { gameName: 'wYzards', tagLine: 'GAME' },
-    { gameName: 'Dorrows', tagLine: '0488' },
-    { gameName: 'Gordaker', tagLine: 'prata' },
-];
-// Região principal para buscar os dados da conta.
-// americas (NA, BR, LAN, LAS), asia (KR, JP), europe (EUNE, EUW, TR, RU)
-const region = 'americas'; 
-// Região/plataforma para buscar os dados de ranking (BR1, NA1, etc.)
-const platform = 'br1'; 
-
-// --- ELEMENTOS DA PÁGINA ---
-const playerListElement = document.getElementById('player-list');
-const loadingElement = document.getElementById('loading');
+// ... (o topo do seu arquivo com a lista de jogadores continua igual) ...
 
 // Função para fazer chamadas à API da Riot de forma segura através do nosso proxy
 async function fetchRiotData(riotUrl) {
-    // Note que a chamada é para o nosso próprio site, na pasta /api/proxy
     const response = await fetch(`/api/proxy?riotUrl=${riotUrl}`);
     if (!response.ok) {
         console.error("Erro ao buscar dados do proxy para:", riotUrl);
@@ -29,26 +12,38 @@ async function fetchRiotData(riotUrl) {
     return response.json();
 }
 
-// Função para buscar todos os dados de um único jogador
+// -------------------------------------------------------------------
+// ▼▼▼ SUBSTITUA SUA FUNÇÃO ANTIGA POR ESTA VERSÃO COMPLETA ▼▼▼
+// -------------------------------------------------------------------
 async function getPlayerData({ gameName, tagLine }) {
     try {
         // 1. Obter PUUID (identificador universal)
         const accountData = await fetchRiotData(`${region}.api.riotgames.com/riot/account/v1/accounts/by-riot-id/${gameName}/${tagLine}`);
-        if (!accountData) return null;
-        
+        if (!accountData || !accountData.puuid) {
+            console.error(`Não foi possível encontrar a conta para ${gameName}#${tagLine}`);
+            return null;
+        }
         const { puuid } = accountData;
 
         // 2. Obter dados do Invocador (ID, ícone)
         const summonerData = await fetchRiotData(`${platform}.api.riotgames.com/lol/summoner/v4/summoners/by-puuid/${puuid}`);
-        console.log(`Dados recebidos para ${gameName}:`, summonerData);
-        if (!summonerData) return null;
+        
+        // --- ESTA É A CORREÇÃO PRINCIPAL ---
+        // Verificamos não só se summonerData existe, mas se ele contém a propriedade 'id'.
+        if (!summonerData || !summonerData.id) {
+            console.error(`Dados do invocador incompletos para ${gameName}. O 'summonerId' não foi encontrado.`);
+            return null; // Pula este jogador e continua para o próximo.
+        }
 
         const { id: summonerId, profileIconId } = summonerData;
 
         // 3. Obter dados de Ranking (Elo)
         const rankData = await fetchRiotData(`${platform}.api.riotgames.com/lol/league/v4/entries/by-summoner/${summonerId}`);
-        if (!rankData) return null;
-
+        if (!rankData) {
+            // Isso pode acontecer se o jogador não tiver jogado partidas ranqueadas
+            return { gameName, tagLine, profileIconId, tier: 'UNRANKED', rank: '', leaguePoints: 0 };
+        }
+        
         const soloQueueData = rankData.find(q => q.queueType === 'RANKED_SOLO_5x5');
         
         return {
@@ -60,12 +55,16 @@ async function getPlayerData({ gameName, tagLine }) {
             leaguePoints: soloQueueData ? soloQueueData.leaguePoints : 0,
         };
     } catch (error) {
-        console.error(`Falha ao buscar dados para ${gameName}#${tagLine}:`, error);
-        return null; // Retorna nulo se houver erro para não quebrar a aplicação
+        console.error(`Falha crítica ao buscar dados para ${gameName}#${tagLine}:`, error);
+        return null; 
     }
 }
+// -------------------------------------------------------------------
+// ▲▲▲ O RESTO DO SEU ARQUIVO (sortPlayers, main, etc.) CONTINUA IGUAL ▲▲▲
+// -------------------------------------------------------------------
 
-// Função para ordenar os jogadores por ranking
+
+// Função para ordenar os jogadores por ranking (continua igual)
 function sortPlayers(players) {
     const tierOrder = { 'CHALLENGER': 1, 'GRANDMASTER': 2, 'MASTER': 3, 'DIAMOND': 4, 'EMERALD': 5, 'PLATINUM': 6, 'GOLD': 7, 'SILVER': 8, 'BRONZE': 9, 'IRON': 10, 'UNRANKED': 11 };
     const rankOrder = { 'I': 1, 'II': 2, 'III': 3, 'IV': 4 };
@@ -82,27 +81,26 @@ function sortPlayers(players) {
     return players;
 }
 
-// Função principal que executa tudo
+// Função principal que executa tudo (continua igual)
 async function main() {
-    // Usamos Promise.all para buscar os dados de todos os jogadores em paralelo
-    const unsortedPlayers = await Promise.all(playersConfig.map(getPlayerData));
+    const loadingElement = document.getElementById('loading');
+    const playerListElement = document.getElementById('player-list');
     
-    // Filtramos qualquer jogador que tenha retornado erro (null)
+    loadingElement.style.display = 'block';
+    playerListElement.innerHTML = '';
+
+    const unsortedPlayers = await Promise.all(playersConfig.map(getPlayerData));
     const validPlayers = unsortedPlayers.filter(p => p !== null);
-
-    // Ordenamos os jogadores
     const sortedPlayers = sortPlayers(validPlayers);
-
-    // Esconde a mensagem de "carregando"
+    
     loadingElement.style.display = 'none';
 
-    // Exibe os jogadores na tela
     sortedPlayers.forEach(player => {
-        const ddragonVersion = "14.5.1"; // Idealmente, buscar a versão mais recente dinamicamente
+        const ddragonVersion = "14.20.1"; // Versão atual
         const playerCard = document.createElement('div');
         playerCard.className = 'player-card';
         playerCard.innerHTML = `
-            <img class="profile-icon" src="http://ddragon.leagueoflegends.com/cdn/${ddragonVersion}/img/profileicon/${player.profileIconId}.png" alt="Ícone de Perfil">
+            <img class="profile-icon" src="https://ddragon.leagueoflegends.com/cdn/${ddragonVersion}/img/profileicon/${player.profileIconId}.png" alt="Ícone de Perfil">
             <div class="player-info">
                 <h2>${player.gameName} #${player.tagLine}</h2>
                 <p>${player.tier === 'UNRANKED' ? 'Sem Ranque' : `${player.tier} ${player.rank} - ${player.leaguePoints} PDL`}</p>
